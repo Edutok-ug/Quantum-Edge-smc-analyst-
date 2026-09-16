@@ -1,0 +1,1435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
+<title>Structure Scanner — SMC + Live News + EAT Calendar</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+:root{
+  --bg:#0a0d12; --panel:#12161f; --panel2:#0d1119; --border:#1f2733;
+  --green:#26d98a; --red:#f04562; --amber:#e6a23c; --blue:#5b9cf6; --violet:#a78bfa;
+  --text:#eef1f7; --sub:#8891a3; --muted:#525a6b;
+  --ff:'Inter',sans-serif; --fm:'IBM Plex Mono',monospace;
+}
+body{font-family:var(--ff);background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;}
+.app{max-width:520px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;background:var(--bg);}
+
+.header{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid var(--border);}
+.price-row{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;}
+.price{font-family:var(--fm);font-size:1.3rem;font-weight:700;}
+.chg{font-size:0.78rem;font-weight:700;font-family:var(--fm);}
+.chg.up{color:var(--green);} .chg.down{color:var(--red);}
+.iconbtn{background:none;border:none;color:var(--sub);font-size:1.1rem;cursor:pointer;padding:6px;}
+
+.controls{display:flex;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border);flex-wrap:wrap;}
+select{background:var(--panel);border:1px solid var(--border);border-radius:9px;color:var(--text);padding:8px 12px;font-family:var(--ff);font-size:0.8rem;font-weight:600;}
+.btn{background:var(--panel);border:1px solid var(--border);border-radius:9px;color:var(--text);padding:8px 14px;font-family:var(--ff);font-size:0.78rem;font-weight:600;cursor:pointer;}
+.btn:hover{border-color:var(--amber);}
+.btn-sm{padding:5px 10px;font-size:0.7rem;}
+.btn-icon{padding:6px 10px;font-size:0.85rem;line-height:1;}
+
+.chart-wrap{position:relative;background:var(--panel2);touch-action:none;}
+canvas{display:block;width:100%;cursor:grab;touch-action:none;}
+canvas.dragging{cursor:grabbing;}
+.zoom-hint{position:absolute;bottom:6px;right:68px;font-size:0.55rem;color:var(--muted);background:#0a0d12cc;padding:2px 8px;border-radius:12px;pointer-events:none;}
+
+.legend{display:flex;flex-wrap:wrap;gap:10px;padding:9px 14px;font-size:0.62rem;color:var(--sub);border-bottom:1px solid var(--border);background:var(--panel2);}
+.legend span{display:flex;align-items:center;gap:5px;}
+.dot{width:9px;height:9px;border-radius:2px;display:inline-block;}
+
+.notice{font-size:0.64rem;color:var(--muted);padding:8px 14px;line-height:1.5;border-bottom:1px solid var(--border);background:#150f06;}
+
+.keyrow{display:flex;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border);background:var(--panel2);align-items:center;}
+.keyrow label{font-size:0.6rem;font-weight:700;color:var(--sub);text-transform:uppercase;letter-spacing:0.4px;min-width:70px;}
+.keyrow input{flex:1;background:var(--panel);border:1px solid var(--border);border-radius:9px;padding:8px 12px;color:var(--text);font-family:var(--ff);font-size:0.78rem;outline:none;min-width:0;}
+.keyrow input:focus{border-color:var(--amber);}
+.keystatus{font-size:0.62rem;color:var(--sub);padding:0 14px 8px;line-height:1.5;}
+
+/* Bell toggle */
+.bellrow{display:flex;align-items:center;justify-content:space-between;padding:8px 14px;background:var(--panel2);border-bottom:1px solid var(--border);font-size:0.7rem;color:var(--sub);}
+.bellrow label{display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:600;color:var(--text);}
+.bellrow input[type="checkbox"]{accent-color:var(--amber);width:16px;height:16px;}
+.bellrow .interval-sel{background:var(--panel);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:4px 8px;font-size:0.68rem;font-family:var(--ff);}
+
+/* Tabs */
+.tabs{display:flex;border-bottom:1px solid var(--border);background:var(--panel2);}
+.tab{flex:1;padding:10px 8px;text-align:center;font-size:0.72rem;font-weight:700;color:var(--sub);cursor:pointer;border-bottom:2px solid transparent;transition:all 0.15s;}
+.tab.active{color:var(--amber);border-bottom-color:var(--amber);}
+.tab:hover{color:var(--text);}
+.tab-panel{display:none;}
+.tab-panel.active{display:block;}
+
+/* News section */
+.news-section{background:var(--panel2);}
+.news-header{display:flex;justify-content:space-between;align-items:center;padding:8px 14px;font-size:0.7rem;font-weight:700;color:var(--sub);letter-spacing:0.5px;}
+.news-header .live-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--green);margin-right:6px;animation:pulse 1.5s infinite;}
+.news-header .live-dot.offline{background:var(--amber);animation:none;}
+@keyframes pulse{0%{opacity:1;}50%{opacity:0.3;}100%{opacity:1;}}
+
+.news-list{padding:4px 14px 14px;display:flex;flex-direction:column;gap:8px;max-height:380px;overflow-y:auto;}
+.news-card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:10px;font-size:0.68rem;line-height:1.45;color:var(--sub);}
+.news-card.high-impact{border-left:3px solid var(--red);}
+.news-card.med-impact{border-left:3px solid var(--amber);}
+.news-card .top-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;gap:6px;}
+.news-card .src{font-weight:700;color:var(--text);font-size:0.6rem;letter-spacing:0.3px;text-transform:uppercase;}
+.news-card .time{font-size:0.55rem;color:var(--muted);font-family:var(--fm);}
+.news-card .headline{color:var(--text);font-weight:600;margin:3px 0 6px;font-size:0.74rem;line-height:1.35;}
+.news-card .meta-row{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;}
+
+.badge{display:inline-block;padding:2px 7px;border-radius:5px;font-size:0.55rem;font-weight:700;font-family:var(--fm);letter-spacing:0.3px;}
+.badge-high{background:#f0456222;color:var(--red);border:1px solid var(--red);}
+.badge-med{background:#e6a23c22;color:var(--amber);border:1px solid var(--amber);}
+.badge-low{background:#26d98a22;color:var(--green);border:1px solid var(--green);}
+.badge-pair{background:#5b9cf622;color:var(--blue);border:1px solid var(--blue);}
+.badge-buy{background:#26d98a;color:#0a0d12;border:1px solid var(--green);}
+.badge-sell{background:#f04562;color:#fff;border:1px solid var(--red);}
+.badge-neutral{background:#8891a322;color:var(--sub);border:1px solid var(--sub);}
+
+/* Calendar */
+.cal-list{padding:4px 14px 14px;display:flex;flex-direction:column;gap:6px;max-height:440px;overflow-y:auto;}
+.cal-day{margin:6px 0 2px;font-size:0.6rem;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:0.5px;font-family:var(--fm);}
+.cal-item{display:grid;grid-template-columns:56px 1fr auto;gap:8px;align-items:center;background:var(--panel);border:1px solid var(--border);border-radius:9px;padding:8px 10px;font-size:0.7rem;}
+.cal-item.past{opacity:0.5;}
+.cal-item.imminent{border-color:var(--red);box-shadow:0 0 0 1px #f0456244;}
+.cal-item .cal-time{font-family:var(--fm);font-size:0.62rem;color:var(--sub);line-height:1.3;}
+.cal-item .cal-time .eat{display:block;font-size:0.5rem;color:var(--muted);}
+.cal-item .cal-event{color:var(--text);font-weight:600;font-size:0.72rem;line-height:1.3;}
+.cal-item .cal-currency{font-size:0.55rem;color:var(--sub);margin-top:2px;}
+.cal-item .cal-impact{font-size:0.55rem;font-weight:700;padding:2px 6px;border-radius:4px;font-family:var(--fm);}
+.cal-impact.high{background:#f0456222;color:var(--red);border:1px solid var(--red);}
+.cal-impact.med{background:#e6a23c22;color:var(--amber);border:1px solid var(--amber);}
+.cal-impact.low{background:#26d98a22;color:var(--green);border:1px solid var(--green);}
+.cal-empty{color:var(--muted);text-align:center;padding:20px;font-size:0.75rem;}
+
+.news-analysis{padding:10px 14px;font-size:0.7rem;color:var(--sub);line-height:1.6;border-top:1px solid var(--border);}
+.news-analysis strong{color:var(--amber);}
+
+.chips{display:flex;gap:8px;padding:10px 14px;overflow-x:auto;border-bottom:1px solid var(--border);}
+.chip{flex:0 0 auto;background:var(--panel);border:1px solid var(--border);border-radius:20px;padding:8px 16px;font-size:0.76rem;font-weight:600;color:var(--text);cursor:pointer;white-space:nowrap;}
+.chip:hover{border-color:var(--amber);color:var(--amber);}
+
+.answer{flex:1;padding:14px;font-size:0.85rem;line-height:1.7;color:var(--text);overflow-y:auto;min-height:160px;}
+.answer .tag{display:inline-block;padding:2px 8px;border-radius:6px;font-size:0.62rem;font-weight:700;font-family:var(--fm);margin-right:6px;}
+.tag-bull{background:#26d98a22;color:var(--green);border:1px solid var(--green);}
+.tag-bear{background:#f0456222;color:var(--red);border:1px solid var(--red);}
+.tag-neutral{background:#e6a23c22;color:var(--amber);border:1px solid var(--amber);}
+.answer h4{font-size:0.78rem;color:var(--sub);margin:12px 0 6px;font-weight:700;}
+.answer h4:first-child{margin-top:0;}
+.answer .row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-family:var(--fm);font-size:0.78rem;gap:8px;}
+.answer .row:last-child{border:none;}
+.placeholder{color:var(--muted);text-align:center;padding:30px 14px;font-size:0.82rem;}
+
+.inputrow{display:flex;gap:8px;padding:12px 14px;border-top:1px solid var(--border);background:var(--panel2);}
+.inputrow input{flex:1;background:var(--panel);border:1px solid var(--border);border-radius:22px;padding:11px 16px;color:var(--text);font-family:var(--ff);font-size:0.82rem;outline:none;}
+.inputrow input:focus{border-color:var(--amber);}
+.sendbtn{background:var(--amber);border:none;border-radius:50%;width:40px;height:40px;color:#100b02;font-weight:800;cursor:pointer;flex:0 0 40px;}
+
+.pill{padding:4px 10px;border-radius:7px;font-size:0.6rem;font-weight:700;border:1px solid;font-family:var(--fm);}
+.pill-green{background:#26d98a1a;border-color:var(--green);color:var(--green);}
+.pill-amber{background:#e6a23c1a;border-color:var(--amber);color:var(--amber);}
+.pill-blue{background:#5b9cf61a;border-color:var(--blue);color:var(--blue);}
+
+.loading{color:var(--muted);font-size:0.72rem;text-align:center;padding:20px;}
+
+/* Popup toast for news alerts */
+.toast-container{position:fixed;top:60px;right:10px;left:10px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none;max-width:500px;margin:0 auto;}
+.toast{background:linear-gradient(135deg,#1a1f2b 0%,#12161f 100%);border:1px solid var(--red);border-radius:12px;padding:12px 14px;box-shadow:0 8px 24px rgba(0,0,0,0.6);pointer-events:auto;animation:slideIn 0.35s ease-out;position:relative;overflow:hidden;}
+.toast.med{border-color:var(--amber);}
+.toast.low{border-color:var(--blue);}
+.toast::before{content:'';position:absolute;top:0;left:0;width:100%;height:3px;background:var(--red);}
+.toast.med::before{background:var(--amber);}
+.toast.low::before{background:var(--blue);}
+.toast .toast-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+.toast .toast-title{font-size:0.68rem;font-weight:800;color:var(--red);text-transform:uppercase;letter-spacing:0.5px;font-family:var(--fm);}
+.toast.med .toast-title{color:var(--amber);}
+.toast.low .toast-title{color:var(--blue);}
+.toast .toast-close{background:none;border:none;color:var(--sub);font-size:1rem;cursor:pointer;padding:0 4px;}
+.toast .toast-headline{font-size:0.78rem;font-weight:600;color:var(--text);line-height:1.35;margin-bottom:8px;}
+.toast .toast-meta{display:flex;flex-wrap:wrap;gap:5px;}
+@keyframes slideIn{from{transform:translateY(-20px);opacity:0;}to{transform:translateY(0);opacity:1;}}
+
+/* Alert flash on bell toggle */
+.bell-active{color:var(--green) !important;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="header">
+    <div class="price-row">
+      <span class="price" id="priceEl">--</span>
+      <span class="chg" id="chgEl">--</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span class="pill pill-amber" id="dataPill">SIMULATED</span>
+      <button class="iconbtn" id="regenBtn" title="Refresh data">⟳</button>
+    </div>
+  </div>
+
+  <div class="keyrow">
+    <label>Twelve</label>
+    <input type="password" id="twelveKeyInp" placeholder="Twelve Data API key (price candles)" />
+    <button class="btn" id="saveTwelveBtn">Save</button>
+  </div>
+  <div class="keyrow">
+    <label>Finnhub</label>
+    <input type="password" id="finnhubKeyInp" placeholder="Finnhub API key (news + calendar)" />
+    <button class="btn" id="saveFinnhubBtn">Save</button>
+  </div>
+  <div class="keystatus" id="keyStatus">No keys saved — simulated data + demo news. Free keys: twelvedata.com · finnhub.io</div>
+
+  <!-- News alert bell row -->
+  <div class="bellrow">
+    <label>
+      <input type="checkbox" id="bellToggle" />
+      🔔 <span id="bellLabel">News alerts OFF</span>
+    </label>
+    <select class="interval-sel" id="bellInterval">
+      <option value="60">Every 1 min</option>
+      <option value="180" selected>Every 3 min</option>
+      <option value="300">Every 5 min</option>
+      <option value="600">Every 10 min</option>
+    </select>
+  </div>
+
+  <div class="controls">
+    <select id="assetSel">
+      <option value="XAUUSD">Gold/USD</option>
+      <option value="EURUSD">EUR/USD</option>
+      <option value="BTCUSD">BTC/USD</option>
+      <option value="GBPUSD">GBP/USD</option>
+    </select>
+    <select id="tfSel">
+      <option value="1M">1M</option>
+      <option value="5M">5M</option>
+      <option value="15M" selected>15M</option>
+      <option value="1H">1H</option>
+      <option value="4H">4H</option>
+      <option value="1D">1D</option>
+    </select>
+    <button class="btn" id="rerunBtn">Rescan</button>
+    <button class="btn btn-icon" id="zoomInBtn" title="Zoom in">＋</button>
+    <button class="btn btn-icon" id="zoomOutBtn" title="Zoom out">－</button>
+    <button class="btn btn-icon" id="zoomResetBtn" title="Reset zoom">⟲</button>
+    <button class="btn btn-icon" id="panLeftBtn" title="Pan left">◀</button>
+    <button class="btn btn-icon" id="panRightBtn" title="Pan right">▶</button>
+  </div>
+
+  <div class="chart-wrap">
+    <canvas id="chart" height="420"></canvas>
+    <div class="zoom-hint">Pinch / scroll to zoom · Drag to pan</div>
+  </div>
+
+  <div class="legend">
+    <span><span class="dot" style="background:var(--blue);"></span>Order Block</span>
+    <span><span class="dot" style="background:var(--amber);"></span>Fair Value Gap</span>
+    <span><span class="dot" style="background:var(--violet);"></span>CHoCH / BOS</span>
+    <span><span class="dot" style="background:#ff8a3d;"></span>Liquidity Sweep</span>
+    <span><span class="dot" style="background:var(--green);"></span>OTE Zone</span>
+  </div>
+
+  <div class="notice">
+    Price: Twelve Data (live with key) or simulated. News & calendar: Finnhub (live with key) or demo. Structure labels are deterministic — not signals. News impact/buy-sell tags are keyword heuristics. Calendar times shown in <strong>East Africa Time (EAT, UTC+3)</strong>.
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="news">📰 News</div>
+    <div class="tab" data-tab="calendar">📅 Econ Calendar</div>
+  </div>
+
+  <div class="tab-panel active" id="panel-news">
+    <div class="news-section">
+      <div class="news-header">
+        <span><span class="live-dot" id="newsDot"></span><span id="newsSource">DEMO FEED</span></span>
+        <span style="font-weight:400;color:var(--muted);font-size:0.6rem;">Updated <span id="newsTime">--</span></span>
+      </div>
+      <div class="news-list" id="newsFeed">
+        <div class="loading">Loading news…</div>
+      </div>
+      <div class="news-analysis">
+        <strong>Macro bias:</strong> <span id="macroBiasText">Analyzing feed…</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="panel-calendar">
+    <div class="news-section">
+      <div class="news-header">
+        <span><span class="live-dot" id="calDot"></span><span id="calSource">DEMO CALENDAR</span></span>
+        <span style="font-weight:400;color:var(--muted);font-size:0.6rem;">EAT (UTC+3) · Next 7 days</span>
+      </div>
+      <div class="cal-list" id="calFeed">
+        <div class="loading">Loading calendar…</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="chips">
+    <div class="chip" data-q="patterns">Patterns</div>
+    <div class="chip" data-q="entry">Entry</div>
+    <div class="chip" data-q="trend">Trend</div>
+    <div class="chip" data-q="risk">Risk</div>
+    <div class="chip" data-q="levels">Levels</div>
+    <div class="chip" data-q="news">News Impact</div>
+    <div class="chip" data-q="calendar">Calendar</div>
+  </div>
+
+  <div class="answer" id="answerBox">
+    <div class="placeholder">Tap a chip above or ask about the chart, news, or calendar.</div>
+  </div>
+
+  <div class="inputrow">
+    <input type="text" id="askInput" placeholder="Ask about chart, news, or calendar…" />
+    <button class="sendbtn" id="sendBtn">→</button>
+  </div>
+</div>
+
+<!-- Toast container for news popups -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+// ============================================================
+// CONFIG
+// ============================================================
+const ASSET_CFG = {
+  XAUUSD:{base:2428, dp:2, label:'Gold/USD', newsTerms:['gold','xau','bullion','metals'], calendarCurrency:'USD'},
+  EURUSD:{base:1.0872, dp:5, label:'EUR/USD', newsTerms:['euro','eur','ecb','eurozone'], calendarCurrency:'EUR'},
+  BTCUSD:{base:64500, dp:2, label:'BTC/USD', newsTerms:['bitcoin','btc','crypto','cryptocurrency'], calendarCurrency:'USD'},
+  GBPUSD:{base:1.2754, dp:5, label:'GBP/USD', newsTerms:['pound','gbp','boe','sterling'], calendarCurrency:'GBP'}
+};
+const TF_CFG = {
+  '1M':{bars:150, vol:0.55}, '5M':{bars:130, vol:0.85}, '15M':{bars:100, vol:1.0},
+  '1H':{bars:85, vol:1.25}, '4H':{bars:70, vol:1.6}, '1D':{bars:55, vol:2.2}
+};
+const TD_SYMBOL = { XAUUSD:'XAU/USD', EURUSD:'EUR/USD', BTCUSD:'BTC/USD', GBPUSD:'GBP/USD' };
+const TD_INTERVAL = { '1M':'1min', '5M':'5min', '15M':'15min', '1H':'1h', '4H':'4h', '1D':'1day' };
+
+let twelveKey = localStorage.getItem('smc_twelve') || '';
+let finnhubKey = localStorage.getItem('smc_finnhub') || '';
+let isLive = false;
+
+let state = {
+  data:[], swings:[], patterns:{}, asset:'XAUUSD', tf:'15M', seed: Date.now(),
+  zoom:1, panX:0,
+  newsItems:[], calendarItems:[], seenNewsIds:new Set(),
+  bellOn: localStorage.getItem('smc_bell') === '1',
+  bellInterval: parseInt(localStorage.getItem('smc_bell_interval') || '180'),
+  bellTimer:null
+};
+
+// ============================================================
+// TIME HELPERS — East Africa Time (UTC+3)
+// ============================================================
+const EAT_OFFSET_MIN = 3 * 60;
+
+function toEAT(date){
+  if(!date) return null;
+  // Return a Date object whose UTC fields match EAT wall-clock
+  const utcMs = date.getTime() + date.getTimezoneOffset()*60000;
+  return new Date(utcMs + EAT_OFFSET_MIN*60000);
+}
+
+function formatEAT(date, opts){
+  if(!date) return '--';
+  const eat = toEAT(date);
+  const hh = String(eat.getUTCHours()).padStart(2,'0');
+  const mm = String(eat.getUTCMinutes()).padStart(2,'0');
+  if(opts && opts.ampm){
+    const h12 = eat.getUTCHours() % 12 || 12;
+    const ampm = eat.getUTCHours() < 12 ? 'AM' : 'PM';
+    return `${h12}:${mm} ${ampm}`;
+  }
+  return `${hh}:${mm}`;
+}
+
+function formatEATDateLabel(date){
+  const eat = toEAT(date);
+  return eat.toLocaleDateString('en-GB', {weekday:'short', day:'numeric', month:'short', timeZone:'UTC'});
+}
+
+// ============================================================
+// LIVE PRICE DATA
+// ============================================================
+async function fetchTwelveDataCandles(asset, tfKey, barCount){
+  if(!twelveKey || twelveKey.length<5) return null;
+  const symbol = TD_SYMBOL[asset], interval = TD_INTERVAL[tfKey];
+  try{
+    const url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(symbol)}&interval=${interval}&outputsize=${barCount}&apikey=${twelveKey}`;
+    const r = await fetch(url);
+    const j = await r.json();
+    if(j.status==='error' || j.code){ console.warn('Twelve Data error:', j.message||j.code); return null; }
+    if(!j.values || j.values.length<20) return null;
+    const data = [];
+    for(let i=j.values.length-1;i>=0;i--){
+      const v=j.values[i];
+      data.push({ o:parseFloat(v.open), h:parseFloat(v.high), l:parseFloat(v.low), c:parseFloat(v.close) });
+    }
+    return data;
+  }catch(e){ console.warn('Twelve Data fetch failed:', e.message); return null; }
+}
+
+function fp(v, dp){ return v.toFixed(dp); }
+
+// ============================================================
+// NEWS CLASSIFICATION
+// ============================================================
+const BULLISH_WORDS = ['rally','surge','gain','rise','rises','rose','jump','soar','strong','beat','upbeat','optimism','boost','recovery','rebound','higher','record high','bullish','hawkish','stimulus','growth','upgrade'];
+const BEARISH_WORDS = ['fall','drop','slump','plunge','decline','weak','miss','downbeat','fear','sell-off','selloff','recession','lower','crash','tumble','downgrade','dovish','cut','layoffs','warning','crisis','bearish'];
+const HIGH_IMPACT_WORDS = ['fed','fomc','rate','inflation','cpi','nfp','payroll','gdp','ecb','boe','boj','powell','lagarde','yields','treasury','recession','war','tariff','opec','crisis','default'];
+const MED_IMPACT_WORDS = ['earnings','jobs','retail','sales','pmi','ism','housing','consumer','sentiment','manufacturing','trade','deficit','debt','oil','gold','dollar','euro','pound'];
+
+function classifyNews(article){
+  const text = ((article.headline||'') + ' ' + (article.summary||'')).toLowerCase();
+  let impact = 'low';
+  if(HIGH_IMPACT_WORDS.some(w=>text.includes(w))) impact='high';
+  else if(MED_IMPACT_WORDS.some(w=>text.includes(w))) impact='med';
+  const bullHits = BULLISH_WORDS.filter(w=>text.includes(w)).length;
+  const bearHits = BEARISH_WORDS.filter(w=>text.includes(w)).length;
+  let bias = 'neutral';
+  if(bullHits > bearHits) bias = 'bullish';
+  else if(bearHits > bullHits) bias = 'bearish';
+  const affected = [];
+  Object.keys(ASSET_CFG).forEach(pair=>{
+    const cfg = ASSET_CFG[pair];
+    if(cfg.newsTerms.some(t=>text.includes(t))) affected.push(pair);
+  });
+  if(affected.length===0 && (text.includes('dollar')||text.includes('usd')||text.includes('fed')||text.includes('fomc'))){
+    affected.push('XAUUSD','EURUSD','BTCUSD','GBPUSD');
+  }
+  if(affected.length===0) affected.push(state.asset);
+  return { impact, bias, affected };
+}
+
+async function fetchFinnhubNews(){
+  if(!finnhubKey || finnhubKey.length<5) return null;
+  try{
+    const url = `https://finnhub.io/api/v1/news?category=general&token=${finnhubKey}`;
+    const r = await fetch(url);
+    const j = await r.json();
+    if(!Array.isArray(j) || j.length===0) return null;
+    return j.slice(0, 14).map(a=>{
+      const cls = classifyNews(a);
+      return {
+        id: a.id || (a.headline||'').slice(0,40),
+        src: a.source || 'Finnhub',
+        headline: a.headline || a.summary || '(no headline)',
+        url: a.url,
+        datetime: a.datetime ? new Date(a.datetime*1000) : new Date(),
+        impact: cls.impact,
+        bias: cls.bias,
+        affected: cls.affected
+      };
+    });
+  }catch(e){ console.warn('Finnhub news failed:', e.message); return null; }
+}
+
+// ============================================================
+// LIVE ECONOMIC CALENDAR
+// ============================================================
+async function fetchFinnhubCalendar(){
+  if(!finnhubKey || finnhubKey.length<5) return null;
+  try{
+    const from = new Date().toISOString().slice(0,10);
+    const to = new Date(Date.now()+7*86400000).toISOString().slice(0,10);
+    const url = `https://finnhub.io/api/v1/calendar/economic?from=${from}&to=${to}&token=${finnhubKey}`;
+    const r = await fetch(url);
+    const j = await r.json();
+    if(!j.economicCalendar || !Array.isArray(j.economicCalendar)) return null;
+    const allowed = ['USD','EUR','GBP','JPY','AUD','CAD','CHF','NZD','CNY'];
+    const parsed = j.economicCalendar
+      .filter(e=>allowed.includes(e.country))
+      .map(e=>{
+        // Finnhub returns time as ISO string with timezone
+        let dt = null;
+        if(e.time){
+          dt = new Date(e.time);
+          if(isNaN(dt.getTime())) dt = null;
+        }
+        return {
+          time: dt,
+          event: e.event || 'Economic event',
+          currency: e.country || '',
+          impact: (e.impact||'').toLowerCase()==='high' ? 'high'
+                : (e.impact||'').toLowerCase()==='medium' ? 'med' : 'low',
+          actual: e.actual, estimate: e.estimate, prev: e.prev
+        };
+      })
+      .filter(e=>e.time)
+      .sort((a,b)=> a.time - b.time)
+      .slice(0, 60);
+    return parsed.length ? parsed : null;
+  }catch(e){ console.warn('Finnhub calendar failed:', e.message); return null; }
+}
+
+// ============================================================
+// DEMO NEWS
+// ============================================================
+function generateDemoNews(asset){
+  const pool = [
+    { src:'Bloomberg', headline:'Fed officials signal patience on rate cuts as inflation cools', impact:'high', bias:'bullish', affected:['XAUUSD','EURUSD','BTCUSD','GBPUSD'] },
+    { src:'Reuters',   headline:'Dollar strengthens after strong US jobs data; gold slips', impact:'high', bias:'bearish', affected:['XAUUSD','EURUSD','GBPUSD'] },
+    { src:'WSJ',       headline:'Treasury yields edge higher ahead of key CPI print', impact:'high', bias:'bearish', affected:['XAUUSD','EURUSD','BTCUSD'] },
+    { src:'CNBC',      headline:'ECB minutes show growing split on policy path', impact:'high', bias:'neutral', affected:['EURUSD'] },
+    { src:'FT',        headline:'Bank of England holds rates, signals caution on cuts', impact:'high', bias:'neutral', affected:['GBPUSD'] },
+    { src:'MarketWatch', headline:'Bitcoin rallies as ETF inflows hit new record', impact:'med', bias:'bullish', affected:['BTCUSD'] },
+    { src:'Bloomberg', headline:'Goldman Sachs raises year-end target for S&P 500', impact:'med', bias:'bullish', affected:['XAUUSD','BTCUSD'] },
+    { src:'Reuters',   headline:'China stimulus hopes lift metals; copper at 3-week high', impact:'med', bias:'bullish', affected:['XAUUSD'] },
+    { src:'CNBC',      headline:'Oil tumbles on demand worries; energy stocks slide', impact:'med', bias:'bearish', affected:['XAUUSD'] },
+    { src:'WSJ',       headline:'Eurozone PMI misses expectations, euro under pressure', impact:'med', bias:'bearish', affected:['EURUSD'] },
+    { src:'Bloomberg', headline:'UK retail sales beat forecasts, pound ticks higher', impact:'med', bias:'bullish', affected:['GBPUSD'] },
+    { src:'FT',        headline:'Crypto market cap tops $2.5T as altcoins surge', impact:'low', bias:'bullish', affected:['BTCUSD'] }
+  ];
+  const shuffled = [...pool].sort(()=>Math.random()-0.5).slice(0,8);
+  return shuffled.map((n,i)=>({
+    ...n,
+    id: 'demo-'+i+'-'+Date.now(),
+    datetime: new Date(Date.now() - Math.floor(Math.random()*3600000)),
+    url: '#'
+  }));
+}
+
+// ============================================================
+// DEMO CALENDAR — Times defined in EAT directly
+// ============================================================
+function generateDemoCalendar(){
+  // Times listed as EAT (UTC+3) hours, so we build the actual UTC Date
+  // by subtracting the offset. This guarantees the demo shows correct EAT.
+  const events = [
+    { d:0, eatHour:8,  eatMin:30, event:'US Initial Jobless Claims', currency:'USD', impact:'med' },
+    { d:0, eatHour:10, eatMin:0,  event:'Fed Chair Powell Speaks', currency:'USD', impact:'high' },
+    { d:0, eatHour:14, eatMin:0,  event:'FOMC Meeting Minutes', currency:'USD', impact:'high' },
+    { d:0, eatHour:16, eatMin:30, event:'EIA Crude Oil Inventories', currency:'USD', impact:'med' },
+    { d:1, eatHour:7,  eatMin:0,  event:'German CPI (MoM)', currency:'EUR', impact:'med' },
+    { d:1, eatHour:12, eatMin:30, event:'US CPI (YoY)', currency:'USD', impact:'high' },
+    { d:1, eatHour:12, eatMin:30, event:'US Core CPI (MoM)', currency:'USD', impact:'high' },
+    { d:1, eatHour:15, eatMin:30, event:'US Crude Oil Inventories', currency:'USD', impact:'low' },
+    { d:2, eatHour:9,  eatMin:0,  event:'ECB Interest Rate Decision', currency:'EUR', impact:'high' },
+    { d:2, eatHour:12, eatMin:30, event:'US Retail Sales', currency:'USD', impact:'med' },
+    { d:2, eatHour:15, eatMin:0,  event:'BoE Governor Speech', currency:'GBP', impact:'med' },
+    { d:3, eatHour:7,  eatMin:0,  event:'UK GDP (QoQ)', currency:'GBP', impact:'med' },
+    { d:3, eatHour:12, eatMin:30, event:'US Non-Farm Payrolls', currency:'USD', impact:'high' },
+    { d:3, eatHour:12, eatMin:30, event:'US Unemployment Rate', currency:'USD', impact:'high' },
+    { d:4, eatHour:9,  eatMin:0,  event:'Bank of England Rate Decision', currency:'GBP', impact:'high' },
+    { d:4, eatHour:14, eatMin:0,  event:'US ISM Services PMI', currency:'USD', impact:'med' },
+    { d:5, eatHour:2,  eatMin:0,  event:'China Industrial Production', currency:'CNY', impact:'med' },
+    { d:5, eatHour:15, eatMin:30, event:'US Consumer Sentiment', currency:'USD', impact:'med' },
+    { d:6, eatHour:6,  eatMin:0,  event:'Eurozone ZEW Sentiment', currency:'EUR', impact:'low' }
+  ];
+  return events.map(e=>{
+    // Build a UTC timestamp that, when converted to EAT (UTC+3), shows the desired hour
+    const now = new Date();
+    const utcH = e.eatHour - 3;
+    const dt = new Date(Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate() + e.d,
+      utcH, e.eatMin, 0, 0
+    ));
+    return {
+      time: dt, event: e.event, currency: e.currency, impact: e.impact
+    };
+  }).sort((a,b)=>a.time-b.time);
+}
+
+// ============================================================
+// RENDER NEWS
+// ============================================================
+function renderNews(){
+  const feed = document.getElementById('newsFeed');
+  const items = state.newsItems;
+  if(!items.length){
+    feed.innerHTML = '<div class="loading">No news available.</div>';
+    document.getElementById('macroBiasText').textContent = '—';
+    return;
+  }
+
+  const fmtTime = (d)=>{
+    if(!d) return '--';
+    const diff = (Date.now() - d.getTime())/60000;
+    if(diff < 1) return 'just now';
+    if(diff < 60) return Math.floor(diff)+'m ago';
+    if(diff < 1440) return Math.floor(diff/60)+'h ago';
+    return formatEATDateLabel(d);
+  };
+
+  feed.innerHTML = items.map(n=>{
+    const impactCls = n.impact==='high'?'badge-high':n.impact==='med'?'badge-med':'badge-low';
+    const cardCls = n.impact==='high'?'high-impact':n.impact==='med'?'med-impact':'';
+    const biasBadge = n.bias==='bullish'
+      ? '<span class="badge badge-buy">BUY</span>'
+      : n.bias==='bearish'
+        ? '<span class="badge badge-sell">SELL</span>'
+        : '<span class="badge badge-neutral">NEUTRAL</span>';
+    const pairBadges = n.affected.map(p=>`<span class="badge badge-pair">${p}</span>`).join('');
+    return `<div class="news-card ${cardCls}">
+      <div class="top-row">
+        <span class="src">${n.src}</span>
+        <span class="time">${fmtTime(n.datetime)}</span>
+      </div>
+      <div class="headline">${n.headline}</div>
+      <div class="meta-row">
+        <span class="badge ${impactCls}">${n.impact.toUpperCase()} IMPACT</span>
+        ${biasBadge}
+        ${pairBadges}
+      </div>
+    </div>`;
+  }).join('');
+
+  const highImpacts = items.filter(n=>n.impact==='high');
+  const bulls = items.filter(n=>n.bias==='bullish').length;
+  const bears = items.filter(n=>n.bias==='bearish').length;
+  let bias = '';
+  if(bulls > bears+1) bias = 'Risk-on tilt — headlines lean bullish. Watch for buy-side liquidity sweeps.';
+  else if(bears > bulls+1) bias = 'Risk-off tone — headlines lean bearish. Watch for sell-side liquidity sweeps.';
+  else bias = 'Mixed macro signals — no clear directional bias from current headlines.';
+  if(highImpacts.length) bias += ` (${highImpacts.length} high-impact item${highImpacts.length>1?'s':''} in feed.)`;
+  bias += ' Not investment advice.';
+  document.getElementById('macroBiasText').textContent = bias;
+
+  document.getElementById('newsTime').textContent = formatEAT(new Date()) + ' EAT';
+}
+
+// ============================================================
+// RENDER CALENDAR (EAT)
+// ============================================================
+function renderCalendar(){
+  const feed = document.getElementById('calFeed');
+  const items = state.calendarItems;
+  if(!items.length){
+    feed.innerHTML = '<div class="cal-empty">No calendar events available.</div>';
+    return;
+  }
+
+  // Group by EAT calendar day
+  const grouped = {};
+  items.forEach(e=>{
+    if(!e.time) return;
+    const eat = toEAT(e.time);
+    const key = eat.toISOString().slice(0,10); // yyyy-mm-dd in EAT
+    if(!grouped[key]) grouped[key]=[];
+    grouped[key].push(e);
+  });
+
+  const nowMs = Date.now();
+  let html = '';
+  Object.keys(grouped).sort().forEach(day=>{
+    const eat = toEAT(new Date(day+'T00:00:00Z'));
+    const todayEAT = toEAT(new Date()).toISOString().slice(0,10);
+    const tomorrowEAT = toEAT(new Date(Date.now()+86400000)).toISOString().slice(0,10);
+    let label;
+    if(day === todayEAT) label = 'TODAY';
+    else if(day === tomorrowEAT) label = 'TOMORROW';
+    else label = eat.toLocaleDateString('en-GB', {weekday:'short', day:'numeric', month:'short', timeZone:'UTC'}).toUpperCase();
+
+    html += `<div class="cal-day">${label} — EAT</div>`;
+    grouped[day].forEach(e=>{
+      const timeStr = formatEAT(e.time); // 24h
+      const isPast = e.time.getTime() < nowMs;
+      const isImminent = !isPast && (e.time.getTime() - nowMs) < 60*60*1000 && e.impact==='high';
+      const impCls = e.impact==='high'?'high':e.impact==='med'?'med':'low';
+      const cls = ['cal-item'];
+      if(isPast) cls.push('past');
+      if(isImminent) cls.push('imminent');
+      const estTxt = e.estimate!=null && e.estimate!=='' ? ` · est ${e.estimate}` : '';
+      const prevTxt = e.prev!=null && e.prev!=='' ? ` · prev ${e.prev}` : '';
+      const actTxt = e.actual!=null && e.actual!=='' ? ` · act ${e.actual}` : '';
+      html += `<div class="${cls.join(' ')}">
+        <div class="cal-time">${timeStr}<span class="eat">EAT</span></div>
+        <div>
+          <div class="cal-event">${e.event}</div>
+          <div class="cal-currency">${e.currency}${estTxt}${prevTxt}${actTxt}</div>
+        </div>
+        <div class="cal-impact ${impCls}">${e.impact.toUpperCase()}</div>
+      </div>`;
+    });
+  });
+  feed.innerHTML = html || '<div class="cal-empty">No upcoming events.</div>';
+}
+
+// ============================================================
+// LOAD NEWS + CALENDAR
+// ============================================================
+async function loadNewsAndCalendar(){
+  let news = await fetchFinnhubNews();
+  if(news && news.length){
+    state.newsItems = news;
+    document.getElementById('newsSource').textContent = 'FINNHUB LIVE';
+    document.getElementById('newsDot').classList.remove('offline');
+  } else {
+    state.newsItems = generateDemoNews(state.asset);
+    document.getElementById('newsSource').textContent = 'DEMO FEED';
+    document.getElementById('newsDot').classList.add('offline');
+  }
+  renderNews();
+
+  let cal = await fetchFinnhubCalendar();
+  if(cal && cal.length){
+    state.calendarItems = cal;
+    document.getElementById('calSource').textContent = 'FINNHUB LIVE';
+    document.getElementById('calDot').classList.remove('offline');
+  } else {
+    state.calendarItems = generateDemoCalendar();
+    document.getElementById('calSource').textContent = 'DEMO CALENDAR';
+    document.getElementById('calDot').classList.add('offline');
+  }
+  renderCalendar();
+}
+
+// ============================================================
+// NEWS ALERTS (popup toast at intervals)
+// ============================================================
+function showToast(newsItem){
+  const container = document.getElementById('toastContainer');
+  const toast = document.createElement('div');
+  toast.className = 'toast ' + (newsItem.impact==='high'?'':newsItem.impact);
+  const impactCls = newsItem.impact==='high'?'badge-high':newsItem.impact==='med'?'badge-med':'badge-low';
+  const biasBadge = newsItem.bias==='bullish'
+    ? '<span class="badge badge-buy">BUY</span>'
+    : newsItem.bias==='bearish'
+      ? '<span class="badge badge-sell">SELL</span>'
+      : '<span class="badge badge-neutral">NEUTRAL</span>';
+  const pairBadges = newsItem.affected.map(p=>`<span class="badge badge-pair">${p}</span>`).join('');
+  toast.innerHTML = `
+    <div class="toast-header">
+      <span class="toast-title">🔔 ${newsItem.impact.toUpperCase()} IMPACT NEWS</span>
+      <button class="toast-close">×</button>
+    </div>
+    <div class="toast-headline">${newsItem.headline}</div>
+    <div class="toast-meta">
+      <span class="badge ${impactCls}">${newsItem.impact.toUpperCase()}</span>
+      ${biasBadge}
+      ${pairBadges}
+    </div>
+  `;
+  container.appendChild(toast);
+  const close = ()=> toast.remove();
+  toast.querySelector('.toast-close').addEventListener('click', close);
+  // Auto-dismiss after 12 seconds
+  setTimeout(close, 12000);
+}
+
+function checkForNewAlerts(){
+  if(!state.bellOn) return;
+  const items = state.newsItems;
+  if(!items.length) return;
+  // Alert on high-impact news that affects the selected asset and we haven't shown yet
+  const relevant = items.filter(n=>
+    n.impact === 'high' &&
+    n.affected.includes(state.asset) &&
+    !state.seenNewsIds.has(n.id)
+  );
+  relevant.slice(0,2).forEach(n=>{
+    state.seenNewsIds.add(n.id);
+    showToast(n);
+  });
+  // Also mark med/low as seen so they don't re-trigger if upgraded later
+  items.forEach(n=> state.seenNewsIds.add(n.id));
+  // Cap the seen set
+  if(state.seenNewsIds.size > 500){
+    state.seenNewsIds = new Set([...state.seenNewsIds].slice(-200));
+  }
+}
+
+function startBellTimer(){
+  if(state.bellTimer) clearInterval(state.bellTimer);
+  if(!state.bellOn) return;
+  state.bellTimer = setInterval(async ()=>{
+    // Refresh news silently
+    const news = await fetchFinnhubNews();
+    if(news && news.length){
+      state.newsItems = news;
+      renderNews();
+      checkForNewAlerts();
+    }
+  }, state.bellInterval*1000);
+  // Also fire immediately on enable
+  checkForNewAlerts();
+}
+
+function updateBellLabel(){
+  const label = document.getElementById('bellLabel');
+  const toggle = document.getElementById('bellToggle');
+  label.textContent = state.bellOn ? 'News alerts ON' : 'News alerts OFF';
+  label.classList.toggle('bell-active', state.bellOn);
+  toggle.checked = state.bellOn;
+}
+
+document.getElementById('bellToggle').addEventListener('change', e=>{
+  state.bellOn = e.target.checked;
+  localStorage.setItem('smc_bell', state.bellOn?'1':'0');
+  updateBellLabel();
+  startBellTimer();
+});
+
+document.getElementById('bellInterval').addEventListener('change', e=>{
+  state.bellInterval = parseInt(e.target.value);
+  localStorage.setItem('smc_bell_interval', String(state.bellInterval));
+  if(state.bellOn) startBellTimer();
+});
+
+// ============================================================
+// SYNTHETIC OHLC
+// ============================================================
+function seededRand(seed){ let s = seed; return function(){ s = (s*9301+49297)%233280; return s/233280; }; }
+
+function generateData(asset, tfKey, seed){
+  const cfg = ASSET_CFG[asset], tfCfg = TF_CFG[tfKey];
+  const rand = seededRand(seed);
+  const n = tfCfg.bars;
+  const tick = cfg.base * 0.0006 * tfCfg.vol;
+  let price = cfg.base;
+  const data = [];
+  let i = 0;
+  let dir = rand() > 0.5 ? 1 : -1;
+  while(i < n){
+    const legLen = 6 + Math.floor(rand()*10);
+    const legStrength = (0.5 + rand()*1.4) * dir;
+    for(let k=0; k<legLen && i<n; k++, i++){
+      const noise = (rand()-0.5) * tick * 1.8;
+      const move = legStrength * tick * (0.4 + rand()*0.8) + noise;
+      const open = price;
+      const close = price + move;
+      const wickUp = Math.abs(move)*rand()*0.7 + tick*0.15;
+      const wickDown = Math.abs(move)*rand()*0.7 + tick*0.15;
+      const high = Math.max(open,close) + wickUp;
+      const low = Math.min(open,close) - wickDown;
+      data.push({o:open,h:high,l:low,c:close});
+      price = close;
+    }
+    dir = dir * -1;
+    const retraceLen = 3 + Math.floor(rand()*5);
+    const retraceStrength = (0.3 + rand()*0.7) * dir;
+    for(let k=0; k<retraceLen && i<n; k++, i++){
+      const noise = (rand()-0.5) * tick * 1.5;
+      const move = retraceStrength * tick * (0.3 + rand()*0.6) + noise;
+      const open = price;
+      const close = price + move;
+      const wickUp = Math.abs(move)*rand()*0.6 + tick*0.12;
+      const wickDown = Math.abs(move)*rand()*0.6 + tick*0.12;
+      const high = Math.max(open,close) + wickUp;
+      const low = Math.min(open,close) - wickDown;
+      data.push({o:open,h:high,l:low,c:close});
+      price = close;
+    }
+    dir = dir * -1;
+  }
+  return data.slice(0,n);
+}
+
+// ============================================================
+// SWING / STRUCTURE
+// ============================================================
+function detectSwings(data, lb){
+  lb = lb || 3;
+  const swings = [];
+  for(let i=lb; i<data.length-lb; i++){
+    let isHigh=true, isLow=true;
+    for(let k=1;k<=lb;k++){
+      if(data[i-k].h > data[i].h || data[i+k].h > data[i].h) isHigh=false;
+      if(data[i-k].l < data[i].l || data[i+k].l < data[i].l) isLow=false;
+    }
+    if(isHigh) swings.push({idx:i, price:data[i].h, type:'high'});
+    if(isLow) swings.push({idx:i, price:data[i].l, type:'low'});
+  }
+  swings.sort((a,b)=>a.idx-b.idx);
+  const cleaned=[];
+  swings.forEach(s=>{
+    const last = cleaned[cleaned.length-1];
+    if(last && last.type===s.type){
+      if((s.type==='high'&&s.price>last.price)||(s.type==='low'&&s.price<last.price)) cleaned[cleaned.length-1]=s;
+    } else cleaned.push(s);
+  });
+  return cleaned;
+}
+
+function detectStructureBreaks(data, swings){
+  const breaks = [];
+  let trend = null;
+  let refHigh=null, refLow=null, swingPtr=0;
+  const usedHighIdx=new Set(), usedLowIdx=new Set();
+  for(let i=0;i<data.length;i++){
+    while(swingPtr<swings.length && swings[swingPtr].idx<=i){
+      const sw=swings[swingPtr];
+      if(sw.type==='high') refHigh=sw; else refLow=sw;
+      swingPtr++;
+    }
+    if(refHigh && !usedHighIdx.has(refHigh.idx) && data[i].c>refHigh.price && i>refHigh.idx){
+      const type = (trend==='down') ? 'CHoCH' : 'BOS';
+      breaks.push({idx:i, level:refHigh.price, dir:'bull', type, refSwingIdx:refHigh.idx});
+      usedHighIdx.add(refHigh.idx);
+      trend='up';
+    }
+    if(refLow && !usedLowIdx.has(refLow.idx) && data[i].c<refLow.price && i>refLow.idx){
+      const type = (trend==='up') ? 'CHoCH' : 'BOS';
+      breaks.push({idx:i, level:refLow.price, dir:'bear', type, refSwingIdx:refLow.idx});
+      usedLowIdx.add(refLow.idx);
+      trend='down';
+    }
+  }
+  return { breaks, trend };
+}
+
+function detectOrderBlocks(data, breaks){
+  const obs = [];
+  breaks.forEach(b=>{
+    const wantColor = b.dir==='bull' ? 'red' : 'green';
+    for(let j=b.idx; j>=Math.max(0,b.idx-8); j--){
+      const cndl = data[j];
+      const color = cndl.c>=cndl.o ? 'green' : 'red';
+      if(color===wantColor){
+        obs.push({ idx:j, high:cndl.h, low:cndl.l, dir:b.dir, breakIdx:b.idx, invalidated:false });
+        break;
+      }
+    }
+  });
+  obs.forEach(ob=>{
+    for(let k=ob.breakIdx+1;k<data.length;k++){
+      if(ob.dir==='bull' && data[k].c<ob.low){ ob.invalidated=true; break; }
+      if(ob.dir==='bear' && data[k].c>ob.high){ ob.invalidated=true; break; }
+    }
+  });
+  return obs;
+}
+
+function detectFVGs(data){
+  const fvgs = [];
+  for(let i=1;i<data.length-1;i++){
+    const a=data[i-1], c=data[i+1];
+    if(a.h < c.l){ fvgs.push({idx:i, top:c.l, bottom:a.h, dir:'bull', filled:false}); }
+    else if(a.l > c.h){ fvgs.push({idx:i, top:a.l, bottom:c.h, dir:'bear', filled:false}); }
+  }
+  fvgs.forEach(g=>{
+    for(let k=g.idx+2;k<data.length;k++){
+      if(data[k].l <= g.top && data[k].h >= g.bottom){ g.filled=true; break; }
+    }
+  });
+  return fvgs;
+}
+
+function detectSweeps(data, swings){
+  const sweeps=[];
+  swings.forEach(sw=>{
+    for(let k=sw.idx+1;k<data.length;k++){
+      if(sw.type==='high' && data[k].h>sw.price && data[k].c<sw.price){
+        sweeps.push({idx:k, level:sw.price, dir:'bear', sweptIdx:sw.idx}); break;
+      }
+      if(sw.type==='low' && data[k].l<sw.price && data[k].c>sw.price){
+        sweeps.push({idx:k, level:sw.price, dir:'bull', sweptIdx:sw.idx}); break;
+      }
+      if(Math.abs(data[k].c - sw.price) > Math.abs(sw.price)*0.01) break;
+    }
+  });
+  return sweeps;
+}
+
+function detectOTE(swings){
+  if(swings.length<2) return null;
+  const a = swings[swings.length-2], b = swings[swings.length-1];
+  if(a.type===b.type) return null;
+  const dir = b.type==='low' ? 'bull' : 'bear';
+  const hi = Math.max(a.price,b.price), lo = Math.min(a.price,b.price);
+  const range = hi-lo;
+  let top, bottom;
+  if(dir==='bull'){ top = lo + range*0.386; bottom = lo + range*0.214; }
+  else { top = hi - range*0.214; bottom = hi - range*0.386; }
+  return { top, bottom, dir, fromIdx:a.idx, toIdx:b.idx };
+}
+
+function runAnalysis(){
+  const data = state.data;
+  const swings = detectSwings(data, 3);
+  const { breaks, trend } = detectStructureBreaks(data, swings);
+  const obs = detectOrderBlocks(data, breaks);
+  const fvgs = detectFVGs(data);
+  const sweeps = detectSweeps(data, swings);
+  const ote = detectOTE(swings);
+  state.swings = swings;
+  state.patterns = { breaks, obs, fvgs, sweeps, ote, trend };
+}
+
+// ============================================================
+// RENDERING
+// ============================================================
+const canvas = document.getElementById('chart');
+const ctx = canvas.getContext('2d');
+let W=0,H=0,DPR=1;
+
+function getVisibleRange(total){
+  const visibleCount = Math.max(10, Math.floor(total / state.zoom));
+  let start = Math.floor((total - visibleCount) * (1 - state.panX));
+  start = Math.max(0, Math.min(total - visibleCount, start));
+  const end = Math.min(total, start + visibleCount);
+  return { start, end, count: end - start };
+}
+
+function resizeCanvas(){
+  DPR = window.devicePixelRatio||1;
+  W = canvas.clientWidth; H = 420;
+  canvas.width = W*DPR; canvas.height = H*DPR;
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+}
+
+function priceRange(data, start, end){
+  let mn=Infinity, mx=-Infinity;
+  for(let i=start;i<end;i++){
+    const d=data[i];
+    if(d.l<mn) mn=d.l;
+    if(d.h>mx) mx=d.h;
+  }
+  const pad=(mx-mn)*0.08 || 1;
+  return { mn: mn-pad, mx: mx+pad };
+}
+
+function xOf(i, start, count){
+  const marginR=54, marginL=8;
+  return marginL + ((i-start)/(count-1))*(W-marginR-marginL);
+}
+function yOf(p,mn,mx){
+  const marginT=14, marginB=14;
+  return marginT + (1-(p-mn)/(mx-mn))*(H-marginT-marginB);
+}
+
+function drawChart(){
+  resizeCanvas();
+  ctx.clearRect(0,0,W,H);
+  const data=state.data, n=data.length;
+  if(n===0) return;
+
+  const { start, end, count } = getVisibleRange(n);
+  const {mn,mx} = priceRange(data, start, end);
+  const cfg = ASSET_CFG[state.asset];
+
+  ctx.strokeStyle='#1a2029'; ctx.lineWidth=1; ctx.font='10px IBM Plex Mono'; ctx.fillStyle='#66707f';
+  const steps=6;
+  for(let s=0;s<=steps;s++){
+    const p = mn + (mx-mn)*(s/steps);
+    const y = yOf(p,mn,mx);
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W-56,y); ctx.stroke();
+    ctx.fillText(fp(p,cfg.dp), W-50, y+3);
+  }
+
+  const candleW = Math.max(2,((W-62)/count)*0.62);
+  for(let i=start; i<end; i++){
+    const d = data[i];
+    const x=xOf(i,start,count);
+    const up = d.c>=d.o;
+    ctx.strokeStyle = up?'#26d98a':'#f04562';
+    ctx.fillStyle = up?'#26d98a':'#f04562';
+    ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(x,yOf(d.h,mn,mx)); ctx.lineTo(x,yOf(d.l,mn,mx)); ctx.stroke();
+    const yO=yOf(d.o,mn,mx), yC=yOf(d.c,mn,mx);
+    ctx.fillRect(x-candleW/2, Math.min(yO,yC), candleW, Math.max(1,Math.abs(yC-yO)));
+  }
+
+  const P = state.patterns;
+  const vis = (idx) => idx >= start && idx < end;
+
+  P.fvgs.forEach(g=>{
+    if(!vis(g.idx)) return;
+    const x1=xOf(Math.max(start,g.idx-1),start,count), x2=xOf(Math.min(end-1,g.idx+8),start,count);
+    const y1=yOf(g.top,mn,mx), y2=yOf(g.bottom,mn,mx);
+    ctx.fillStyle = g.filled ? 'rgba(230,162,60,0.06)' : 'rgba(230,162,60,0.18)';
+    ctx.strokeStyle='#e6a23c'; ctx.setLineDash(g.filled?[3,3]:[]);
+    ctx.fillRect(x1,y1,x2-x1,y2-y1); ctx.strokeRect(x1,y1,x2-x1,y2-y1);
+    ctx.setLineDash([]);
+    ctx.fillStyle='#e6a23c'; ctx.font='9px Inter'; ctx.fillText('FVG'+(g.filled?' (filled)':''), x1+3, y1+11);
+  });
+
+  P.obs.forEach(ob=>{
+    if(!vis(ob.idx)) return;
+    const x1=xOf(Math.max(start,ob.idx),start,count), x2=xOf(Math.min(end-1,ob.breakIdx+6),start,count);
+    const y1=yOf(ob.high,mn,mx), y2=yOf(ob.low,mn,mx);
+    ctx.fillStyle = ob.invalidated ? 'rgba(91,156,246,0.05)' : 'rgba(91,156,246,0.16)';
+    ctx.strokeStyle='#5b9cf6'; ctx.setLineDash(ob.invalidated?[3,3]:[]);
+    ctx.fillRect(x1,y1,x2-x1,y2-y1); ctx.strokeRect(x1,y1,x2-x1,y2-y1);
+    ctx.setLineDash([]);
+    ctx.fillStyle='#5b9cf6'; ctx.font='9px Inter'; ctx.fillText('OB'+(ob.invalidated?' (invalid)':''), x1+3, y1-3<10?y1+11:y1-3);
+  });
+
+  if(P.ote && vis(P.ote.toIdx)){
+    const x1=xOf(Math.max(start,P.ote.toIdx),start,count), x2=W-56;
+    const y1=yOf(P.ote.top,mn,mx), y2=yOf(P.ote.bottom,mn,mx);
+    ctx.fillStyle='rgba(38,217,138,0.10)'; ctx.strokeStyle='#26d98a';
+    ctx.fillRect(x1,y1,x2-x1,y2-y1); ctx.strokeRect(x1,y1,x2-x1,y2-y1);
+    ctx.fillStyle='#26d98a'; ctx.font='9px Inter'; ctx.fillText('OTE', x1+3, y1+11);
+  }
+
+  P.breaks.forEach(b=>{
+    if(!vis(b.refSwingIdx) && !vis(b.idx)) return;
+    const y=yOf(b.level,mn,mx);
+    const x1=xOf(Math.max(start,b.refSwingIdx),start,count), x2=xOf(Math.min(end-1,b.idx),start,count);
+    ctx.strokeStyle='#a78bfa'; ctx.setLineDash([5,4]); ctx.lineWidth=1.3;
+    ctx.beginPath(); ctx.moveTo(x1,y); ctx.lineTo(x2,y); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle='#a78bfa'; ctx.font='bold 9px Inter';
+    ctx.fillText(b.type, (x1+x2)/2-14, y-5);
+  });
+
+  P.sweeps.forEach(sw=>{
+    if(!vis(sw.idx)) return;
+    const x=xOf(sw.idx,start,count);
+    const y = sw.dir==='bear' ? yOf(sw.level,mn,mx)-8 : yOf(sw.level,mn,mx)+8;
+    ctx.fillStyle='#ff8a3d';
+    ctx.beginPath(); ctx.arc(x,y,3,0,Math.PI*2); ctx.fill();
+    ctx.font='9px Inter'; ctx.fillText('Sweep', x-14, y+(sw.dir==='bear'?-6:14));
+  });
+
+  const last = data[n-1];
+  const ly = yOf(last.c,mn,mx);
+  ctx.strokeStyle='#e6a23c'; ctx.setLineDash([2,3]);
+  ctx.beginPath(); ctx.moveTo(0,ly); ctx.lineTo(W-56,ly); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle='#e6a23c'; ctx.fillRect(W-56,ly-8,54,16);
+  ctx.fillStyle='#100b02'; ctx.font='bold 10px IBM Plex Mono'; ctx.fillText(fp(last.c,cfg.dp), W-53, ly+3);
+
+  ctx.fillStyle='#525a6b'; ctx.font='9px IBM Plex Mono';
+  ctx.fillText(`zoom ${state.zoom.toFixed(1)}x  ·  bars ${start+1}–${end}`, 8, H-8);
+}
+
+// ============================================================
+// HEADER
+// ============================================================
+function updateHeader(){
+  const data=state.data, cfg=ASSET_CFG[state.asset];
+  if(!data.length) return;
+  const first=data[0].o, last=data[data.length-1].c;
+  const chg = ((last-first)/first)*100;
+  document.getElementById('priceEl').textContent = fp(last,cfg.dp);
+  const chgEl=document.getElementById('chgEl');
+  chgEl.textContent = (chg>=0?'▲ +':'▼ ')+Math.abs(chg).toFixed(2)+'%';
+  chgEl.className = 'chg '+(chg>=0?'up':'down');
+}
+
+// ============================================================
+// ANSWER ENGINE
+// ============================================================
+function fmt(p){ return fp(p, ASSET_CFG[state.asset].dp); }
+
+function buildAnswer(kind){
+  const P = state.patterns, data = state.data;
+  const last = data[data.length-1];
+  const box = document.getElementById('answerBox');
+
+  if(kind==='trend'){
+    const trendTag = P.trend==='up' ? '<span class="tag tag-bull">BULLISH</span>' : P.trend==='down' ? '<span class="tag tag-bear">BEARISH</span>' : '<span class="tag tag-neutral">UNCLEAR</span>';
+    const lastBreak = P.breaks[P.breaks.length-1];
+    box.innerHTML = `${trendTag}<div style="margin-top:8px;">
+      ${lastBreak ? `Last confirmed structure event: <strong>${lastBreak.type}</strong> to the ${lastBreak.dir==='bull'?'upside':'downside'} at ${fmt(lastBreak.level)}.` : 'No structure break confirmed yet.'}
+      ${P.trend ? ` Current bias: ${P.trend==='up'?'bullish — higher highs/lows since the last break':'bearish — lower highs/lows since the last break'}.` : ''}
+      </div>`;
+    return;
+  }
+  if(kind==='patterns'){
+    let html = '';
+    html += `<h4>Order blocks (${P.obs.length})</h4>`;
+    if(!P.obs.length) html += '<div style="color:var(--muted);">None detected.</div>';
+    P.obs.forEach(ob=>{ html += `<div class="row"><span>${ob.dir==='bull'?'Bullish':'Bearish'} OB ${ob.invalidated?'(invalidated)':''}</span><span>${fmt(ob.low)}–${fmt(ob.high)}</span></div>`; });
+    html += `<h4>Fair value gaps (${P.fvgs.length})</h4>`;
+    if(!P.fvgs.length) html += '<div style="color:var(--muted);">None detected.</div>';
+    P.fvgs.forEach(g=>{ html += `<div class="row"><span>${g.dir==='bull'?'Bullish':'Bearish'} FVG ${g.filled?'(filled)':'(open)'}</span><span>${fmt(g.bottom)}–${fmt(g.top)}</span></div>`; });
+    html += `<h4>Liquidity sweeps (${P.sweeps.length})</h4>`;
+    if(!P.sweeps.length) html += '<div style="color:var(--muted);">None detected.</div>';
+    P.sweeps.forEach(s=>{ html += `<div class="row"><span>${s.dir==='bull'?'Buy-side':'Sell-side'} sweep</span><span>${fmt(s.level)}</span></div>`; });
+    box.innerHTML = html;
+    return;
+  }
+  if(kind==='entry'){
+    const openOB = [...P.obs].reverse().find(o=>!o.invalidated);
+    const openFVG = [...P.fvgs].reverse().find(g=>!g.filled);
+    let html = '';
+    if(P.ote){
+      html += `<span class="tag ${P.ote.dir==='bull'?'tag-bull':'tag-bear'}">OTE ${P.ote.dir==='bull'?'LONG':'SHORT'} ZONE</span>`;
+      html += `<div style="margin-top:8px;">Most recent impulse leg's 61.8–78.6% retracement sits at <strong>${fmt(P.ote.bottom)}–${fmt(P.ote.top)}</strong>.</div>`;
+    } else {
+      html += '<div style="color:var(--muted);">No clean two-leg impulse for OTE yet.</div>';
+    }
+    if(openOB) html += `<div style="margin-top:10px;">Nearest unmitigated order block: <strong>${fmt(openOB.low)}–${fmt(openOB.high)}</strong> (${openOB.dir}).</div>`;
+    if(openFVG) html += `<div style="margin-top:6px;">Nearest unfilled FVG: <strong>${fmt(openFVG.bottom)}–${fmt(openFVG.top)}</strong> (${openFVG.dir}).</div>`;
+    html += `<div style="margin-top:10px;color:var(--muted);font-size:0.75rem;">Not a recommendation to trade.</div>`;
+    box.innerHTML = html;
+    return;
+  }
+  if(kind==='risk'){
+    const lastBreak = P.breaks[P.breaks.length-1];
+    const openOB = [...P.obs].reverse().find(o=>!o.invalidated);
+    let html = '';
+    if(lastBreak){
+      const dist = Math.abs(last.c - lastBreak.level);
+      const distPct = (dist/last.c*100).toFixed(2);
+      html += `<div class="row"><span>Price vs last structure level</span><span>${distPct}% away</span></div>`;
+      html += `<div style="margin-top:8px;">A close back through ${fmt(lastBreak.level)} against the current bias invalidates the last ${lastBreak.type}.</div>`;
+    }
+    if(openOB){
+      html += `<div style="margin-top:8px;">Active ${openOB.dir} OB (${fmt(openOB.low)}–${fmt(openOB.high)}) is invalidated if price closes fully through it.</div>`;
+    }
+    html += `<div style="margin-top:10px;color:var(--muted);font-size:0.75rem;">Size positions off your own account risk %, not zone width alone.</div>`;
+    box.innerHTML = html || '<div class="placeholder">Not enough structure yet.</div>';
+    return;
+  }
+  if(kind==='levels'){
+    let html = '<h4>Key swing levels</h4>';
+    const recent = state.swings.slice(-6);
+    recent.forEach(s=>{ html += `<div class="row"><span>${s.type==='high'?'Swing high':'Swing low'}</span><span>${fmt(s.price)}</span></div>`; });
+    box.innerHTML = html;
+    return;
+  }
+  if(kind==='news'){
+    const items = state.newsItems;
+    if(!items.length){ box.innerHTML = '<div class="placeholder">No news loaded.</div>'; return; }
+    const high = items.filter(n=>n.impact==='high');
+    const bulls = items.filter(n=>n.bias==='bullish');
+    const bears = items.filter(n=>n.bias==='bearish');
+    let html = `<h4>📰 News Impact on ${state.asset}</h4>`;
+    html += `<div style="font-size:0.82rem;line-height:1.6;">`;
+    html += `High-impact: <strong>${high.length}</strong> · Bullish: <strong>${bulls.length}</strong> · Bearish: <strong>${bears.length}</strong><br>`;
+    if(bulls.length > bears.length+1) html += `Headlines lean <span class="tag tag-bull">BULLISH</span> — buy-side sweeps more likely.`;
+    else if(bears.length > bulls.length+1) html += `Headlines lean <span class="tag tag-bear">BEARISH</span> — sell-side sweeps more likely.`;
+    else html += `Mixed signals — expect two-way liquidity grabs.`;
+    html += `</div>`;
+    const relevant = items.filter(n=>n.affected.includes(state.asset)).slice(0,4);
+    if(relevant.length){
+      html += `<h4>Directly affects ${state.asset}</h4>`;
+      relevant.forEach(n=>{
+        const biasCls = n.bias==='bullish'?'tag-bull':n.bias==='bearish'?'tag-bear':'tag-neutral';
+        html += `<div class="row"><span>${n.headline.slice(0,50)}${n.headline.length>50?'…':''}</span><span class="tag ${biasCls}">${n.bias.toUpperCase()}</span></div>`;
+      });
+    }
+    box.innerHTML = html;
+    return;
+  }
+  if(kind==='calendar'){
+    const items = state.calendarItems;
+    if(!items.length){ box.innerHTML = '<div class="placeholder">No calendar events loaded.</div>'; return; }
+    const now = Date.now();
+    const todayEAT = toEAT(new Date()).toISOString().slice(0,10);
+    const todays = items.filter(e=>e.time && toEAT(e.time).toISOString().slice(0,10)===todayEAT);
+    const upcoming = items.filter(e=>e.time && e.time.getTime() >= now).slice(0,6);
+    let html = `<h4>📅 Economic Calendar (EAT)</h4>`;
+    html += `<div style="font-size:0.78rem;line-height:1.55;">Today: <strong>${todays.length}</strong> events · High-impact: <strong>${items.filter(e=>e.impact==='high').length}</strong> upcoming.</div>`;
+    html += `<h4>Next events</h4>`;
+    upcoming.forEach(e=>{
+      const impCls = e.impact==='high'?'tag-bear':e.impact==='med'?'tag-neutral':'tag-bull';
+      html += `<div class="row"><span>${formatEAT(e.time)} ${e.currency} ${e.event.slice(0,32)}${e.event.length>32?'…':''}</span><span class="tag ${impCls}">${e.impact.toUpperCase()}</span></div>`;
+    });
+    html += `<div style="margin-top:10px;color:var(--muted);font-size:0.72rem;">Times shown in East Africa Time (UTC+3). High-impact events (red) can trigger liquidity sweeps. Avoid entering right before releases unless it's part of your plan.</div>`;
+    box.innerHTML = html;
+    return;
+  }
+  const q = kind.toLowerCase();
+  if(q.includes('ob')||q.includes('order block')) return buildAnswer('patterns');
+  if(q.includes('fvg')||q.includes('gap')) return buildAnswer('patterns');
+  if(q.includes('sweep')||q.includes('liquid')) return buildAnswer('patterns');
+  if(q.includes('trend')||q.includes('bias')) return buildAnswer('trend');
+  if(q.includes('entry')||q.includes('ote')||q.includes('buy')||q.includes('sell')) return buildAnswer('entry');
+  if(q.includes('risk')||q.includes('stop')||q.includes('sl')) return buildAnswer('risk');
+  if(q.includes('level')||q.includes('support')||q.includes('resistance')) return buildAnswer('levels');
+  if(q.includes('news')||q.includes('headline')) return buildAnswer('news');
+  if(q.includes('calendar')||q.includes('event')||q.includes('economic')) return buildAnswer('calendar');
+  box.innerHTML = `<div class="placeholder">Try: patterns, entry, trend, risk, levels, news, or calendar.</div>`;
+}
+
+// ============================================================
+// WIRE UP
+// ============================================================
+function setDataPill(live){
+  isLive = live;
+  const pill = document.getElementById('dataPill');
+  pill.textContent = live ? 'LIVE' : 'SIMULATED';
+  pill.className = 'pill ' + (live ? 'pill-green' : 'pill-amber');
+}
+
+async function regenerateAndRender(){
+  const regenBtn = document.getElementById('regenBtn');
+  regenBtn.textContent = '…';
+  const tfCfg = TF_CFG[state.tf];
+  const live = await fetchTwelveDataCandles(state.asset, state.tf, tfCfg.bars);
+  if(live){
+    state.data = live;
+    setDataPill(true);
+  } else {
+    state.data = generateData(state.asset, state.tf, state.seed);
+    setDataPill(false);
+  }
+  regenBtn.textContent = '⟳';
+  state.zoom = 1;
+  state.panX = 0;
+  runAnalysis();
+  updateHeader();
+  drawChart();
+  await loadNewsAndCalendar();
+}
+
+function updateKeyStatus(){
+  const el = document.getElementById('keyStatus');
+  const parts = [];
+  parts.push(twelveKey && twelveKey.length>=5 ? '✓ Twelve (live candles)' : '✗ Twelve (simulated)');
+  parts.push(finnhubKey && finnhubKey.length>=5 ? '✓ Finnhub (live news + calendar)' : '✗ Finnhub (demo)');
+  el.textContent = parts.join('  ·  ') + '  —  Free keys: twelvedata.com · finnhub.io';
+}
+
+document.getElementById('saveTwelveBtn').addEventListener('click', ()=>{
+  const v = document.getElementById('twelveKeyInp').value.trim();
+  if(!v) return;
+  twelveKey = v;
+  localStorage.setItem('smc_twelve', v);
+  updateKeyStatus();
+  regenerateAndRender();
+});
+
+document.getElementById('saveFinnhubBtn').addEventListener('click', ()=>{
+  const v = document.getElementById('finnhubKeyInp').value.trim();
+  if(!v) return;
+  finnhubKey = v;
+  localStorage.setItem('smc_finnhub', v);
+  updateKeyStatus();
+  loadNewsAndCalendar();
+});
+
+if(twelveKey){ document.getElementById('twelveKeyInp').value = twelveKey; }
+if(finnhubKey){ document.getElementById('finnhubKeyInp').value = finnhubKey; }
+updateKeyStatus();
+
+document.getElementById('assetSel').addEventListener('change', e=>{ state.asset=e.target.value; state.seed=Date.now(); regenerateAndRender(); });
+document.getElementById('tfSel').addEventListener('change', e=>{ state.tf=e.target.value; state.seed=Date.now(); regenerateAndRender(); });
+document.getElementById('regenBtn').addEventListener('click', ()=>{ state.seed=Date.now(); regenerateAndRender(); });
+document.getElementById('rerunBtn').addEventListener('click', ()=>{ runAnalysis(); drawChart(); });
+document.querySelectorAll('.chip').forEach(c=>c.addEventListener('click', ()=>buildAnswer(c.getAttribute('data-q'))));
+document.getElementById('sendBtn').addEventListener('click', ()=>{
+  const v=document.getElementById('askInput').value.trim();
+  if(v) buildAnswer(v);
+  document.getElementById('askInput').value='';
+});
+document.getElementById('askInput').addEventListener('keydown', e=>{ if(e.key==='Enter') document.getElementById('sendBtn').click(); });
+
+document.querySelectorAll('.tab').forEach(t=>{
+  t.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById('panel-'+t.getAttribute('data-tab')).classList.add('active');
+  });
+});
+
+// ============================================================
+// ZOOM / PAN — mouse + touch
+// ============================================================
+function zoomAt(clientX, factor){
+  const rect = canvas.getBoundingClientRect();
+  const mx = clientX - rect.left;
+  const n = state.data.length;
+  if(n===0) return;
+  const { start, count } = getVisibleRange(n);
+  const ratio = (mx - 8) / (W - 62);
+  const idxAtMouse = start + ratio * count;
+  state.zoom = Math.max(0.3, Math.min(10, state.zoom * factor));
+  const newRange = getVisibleRange(n);
+  const newRatio = (idxAtMouse - newRange.start) / newRange.count;
+  state.panX = 1 - (newRange.start / (n - newRange.count)) - (newRatio - ratio) * 0.5;
+  state.panX = Math.max(0, Math.min(1, state.panX));
+  drawChart();
+}
+
+canvas.addEventListener('wheel', (e)=>{
+  e.preventDefault();
+  const delta = -Math.sign(e.deltaY);
+  zoomAt(e.clientX, 1 + delta*0.12);
+}, {passive:false});
+
+// Pointer drag (works for mouse + touch)
+let activePointerId = null;
+let pointerStartX = 0, pointerStartPan = 0;
+let pointerStartDist = 0, pinchStartZoom = 1;
+let pointers = new Map();
+
+canvas.addEventListener('pointerdown', (e)=>{
+  pointers.set(e.pointerId, e.clientX);
+  canvas.setPointerCapture(e.pointerId);
+  if(pointers.size === 1){
+    activePointerId = e.pointerId;
+    pointerStartX = e.clientX;
+    pointerStartPan = state.panX;
+    canvas.classList.add('dragging');
+  } else if(pointers.size === 2){
+    const xs = [...pointers.values()];
+    pointerStartDist = Math.abs(xs[0] - xs[1]);
+    pinchStartZoom = state.zoom;
+  }
+});
+
+canvas.addEventListener('pointermove', (e)=>{
+  if(!pointers.has(e.pointerId)) return;
+  pointers.set(e.pointerId, e.clientX);
+  if(pointers.size === 2){
+    // pinch zoom
+    const xs = [...pointers.values()];
+    const dist = Math.abs(xs[0] - xs[1]);
+    if(pointerStartDist > 0){
+      const factor = dist / pointerStartDist;
+      const newZoom = Math.max(0.3, Math.min(10, pinchStartZoom * factor));
+      if(Math.abs(newZoom - state.zoom) > 0.001){
+        state.zoom = newZoom;
+        drawChart();
+      }
+    }
+    return;
+  }
+  if(e.pointerId !== activePointerId) return;
+  const dx = e.clientX - pointerStartX;
+  const n = state.data.length;
+  if(n===0) return;
+  state.panX = Math.max(0, Math.min(1, pointerStartPan - dx/W));
+  drawChart();
+});
+
+function endPointer(e){
+  pointers.delete(e.pointerId);
+  if(pointers.size < 2) pointerStartDist = 0;
+  if(pointers.size === 0){
+    activePointerId = null;
+    canvas.classList.remove('dragging');
+  } else if(pointers.size === 1){
+    // Resume single-finger drag with the remaining pointer
+    const remainingId = [...pointers.keys()][0];
+    activePointerId = remainingId;
+    pointerStartX = pointers.get(remainingId);
+    pointerStartPan = state.panX;
+  }
+}
+canvas.addEventListener('pointerup', endPointer);
+canvas.addEventListener('pointercancel', endPointer);
+canvas.addEventListener('pointerleave', (e)=>{ if(!canvas.hasPointerCapture(e.pointerId)) endPointer(e); });
+
+document.getElementById('zoomInBtn').addEventListener('click', ()=>{ state.zoom = Math.min(10, state.zoom*1.3); drawChart(); });
+document.getElementById('zoomOutBtn').addEventListener('click', ()=>{ state.zoom = Math.max(0.3, state.zoom/1.3); drawChart(); });
+document.getElementById('zoomResetBtn').addEventListener('click', ()=>{ state.zoom=1; state.panX=0; drawChart(); });
+document.getElementById('panLeftBtn').addEventListener('click', ()=>{ state.panX = Math.max(0, state.panX - 0.15); drawChart(); });
+document.getElementById('panRightBtn').addEventListener('click', ()=>{ state.panX = Math.min(1, state.panX + 0.15); drawChart(); });
+
+window.addEventListener('resize', ()=>drawChart());
+
+// ============================================================
+// INIT
+// ============================================================
+updateBellLabel();
+if(state.bellOn) startBellTimer();
+document.getElementById('bellInterval').value = String(state.bellInterval);
+
+regenerateAndRender();
+
+// Refresh calendar/news every 5 minutes in background (regardless of bell)
+setInterval(async ()=>{
+  const news = await fetchFinnhubNews();
+  if(news && news.length){
+    state.newsItems = news;
+    renderNews();
+    if(state.bellOn) checkForNewAlerts();
+  }
+  const cal = await fetchFinnhubCalendar();
+  if(cal && cal.length){
+    state.calendarItems = cal;
+    renderCalendar();
+  }
+}, 300000);
+</script>
+</body>
+</html>
